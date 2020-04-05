@@ -1,0 +1,103 @@
+
+#This is an analysis of StackOverflow posts tags. The data we need can be downloaded from 
+#Stack Exchange Data Explorer (SEDE) (https://data.stackexchange.com/stackoverflow/query/new).
+#First, we'll analyze the frequency of using and viewing tags. We'll find the most popular. 
+#We ran a query against the SEDE DSSE database that the .csv - file 
+#for all the questions in 2019. Second, we'll analyze the dynamic of most popular tags. 
+#We'll use 'all_questions.csv' which presents data from 2014 year.
+
+
+# Import librarys:
+import pandas as pd
+import datetime as dt
+import re
+import matplotlib.pyplot as plt
+
+#PART1 Analyzing most popular tags
+
+#Read the file into pandas dataframe:
+posts = pd.read_csv('2019_questions.csv')
+
+#Check the data:
+print(posts.head())
+print(posts.dtypes)
+
+#Fill the missing values with 0
+posts.fillna(0, inplace = True)
+
+#Change types of some columns: 
+pd.to_datetime(posts['CreationDate'])
+posts['FavoriteCount'] = posts['FavoriteCount'].astype('int')
+
+#Check result
+posts.dtypes
+
+#Clear the tag-column
+posts['Tags'] = posts['Tags'].str.replace('><',",").str.replace('<','').str.replace('>','')
+
+#Create new dataframe with two columns: 'Tag' and 'ViewCount'
+tags = pd.concat([posts['Tags'].str.split(',',expand=True), posts['ViewCount'], posts['Id']], axis = 1)
+tags_melted = pd.melt(tags, value_vars = [0,1,2,3,4], id_vars = ['ViewCount', 'Id'])
+tags_melted.dropna(inplace = True)
+tag = tags_melted[['ViewCount', 'value']].reindex()
+tag.rename(columns={'value': 'Tag'}, inplace=True)
+
+#Check result
+tag.head()
+
+# Aggregation of data for the plots. We'll take top-20 popular tags:
+
+top_use_tag = tag.groupby('tag').count().sort_values(by = 'ViewCount', ascending = False).reset_index().head(20)
+top_view_tag = tag.groupby('tag').sum().sort_values(by = 'ViewCount', ascending = False).reset_index().head(20)
+
+#Make the plot 'Tag frequency view in StackOverflow':
+
+fig, ax = plt.subplots(figsize=(30,15), facecolor='white', dpi= 80)
+ax.vlines(x=top_view_tag.index, ymin=0, ymax = top_view_tag.ViewCount, color='firebrick', alpha=0.9, linewidth=40)
+
+for i, ViewCount in enumerate(top_view_tag.ViewCount):
+    ax.text(i, ViewCount+0.5, round(ViewCount, 1), horizontalalignment='center')
+    
+ax.set_title('Tag frequency view in StackOverflow', fontdict={'size':50})
+ax.set(ylabel='Number of usage', ylim=(0, 600000))
+plt.xticks(top_view_tag.index, top_view_tag.tag.str.upper(), rotation=60, horizontalalignment='right', fontsize=20)
+
+#Make the plot 'Tag frequency usage in StackOverflow':
+fig, ax = plt.subplots(figsize=(30,15), facecolor='white', dpi= 80)
+ax.vlines(x=top_use_tag.index, ymin=0, ymax = top_use_tag.ViewCount, color='firebrick', alpha=0.9, linewidth=40)
+
+for i, ViewCount in enumerate(top_use_tag.ViewCount):
+    ax.text(i, ViewCount+0.5, round(ViewCount, 1), horizontalalignment='center')
+    
+ax.set_title('Tag frequency usage in StackOverflow', fontdict={'size':50})
+ax.set(ylabel='Number of usage', ylim=(0, 3000))
+plt.xticks(top_use_tag.index, top_use_tag.tag.str.upper(), rotation=60, horizontalalignment='right', fontsize=20)
+
+#PART2 Analyzing "machine-learning" (ML) tag across the time
+
+#Reading all-question.csv file to analyze dynamic of usage:
+all_que = pd.read_csv('all_questions.csv', parse_dates = ['CreationDate'])
+
+#Turn tag string into list:
+all_que['Tags'] = all_que['Tags'].str.replace('><',",").str.replace('<','').str.replace('>','')
+all_que['Tags'] = all_que['Tags'].str.split(",")
+
+#Make year_month column (to remove day-time data)
+all_que['year_month'] = all_que['CreationDate'].apply(lambda date: date.strftime('%Y-%m'))
+all_que['year_month'] = all_que['year_month'].apply(lambda date: dt.datetime.strptime(date, '%Y-%m'))
+
+#Create function that check each post tag and return True if there are any tags from 'ML' tags list.
+def deep_mention(list_of_tags):
+    tags_template = ['machine-learning-model','machine-learning','deep-learning', 'neural-network', 'keras', 'tensorflow', 'classification', 'scikit-learn']
+    for elem in tags_template:
+        if elem in list_of_tags:
+            return 1
+    return 0  
+
+#Apply the function and aggregate the data by time (year_month) column:
+all_que['ML'] = all_que['Tags'].apply(deep_mention)
+ML_tags = all_que.groupby('year_month')['ML'].sum().reset_index()
+
+#Make a plot
+plt.figure(figsize=(16,10), dpi= 80)
+plt.plot('year_month', 'ML', data=ML_tags, color='red')
