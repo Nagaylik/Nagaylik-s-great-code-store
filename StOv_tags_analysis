@@ -7,7 +7,7 @@
 #We'll use 'all_questions.csv' which presents data from 2014 year.
 
 
-# Import librarys:
+# Import libraries:
 import pandas as pd
 import datetime as dt
 import re
